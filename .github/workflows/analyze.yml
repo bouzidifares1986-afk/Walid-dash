@@ -1,0 +1,67 @@
+
+name: Analyze FR and Build V4
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  analyze-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare V4 project
+        run: |
+          unzip -q v4-source.zip -d /tmp/v4src
+          cp /tmp/v4src/build/build.gradle .
+          cp /tmp/v4src/build/settings.gradle .
+          cp /tmp/v4src/build/gradle.properties .
+          cp -a /tmp/v4src/build/app .
+          mkdir -p original output
+          cp fr.apk original/OrdinateurDeBord_FR.apk
+
+      - name: Install JADX
+        run: |
+          curl -L --fail -o jadx.zip \
+            https://github.com/skylot/jadx/releases/download/v1.5.1/jadx-1.5.1.zip
+          unzip -q jadx.zip -d jadx
+          chmod +x jadx/bin/jadx
+
+      - name: Extract FR source
+        run: |
+          ./jadx/bin/jadx \
+            -d output/fr-decompiled \
+            original/OrdinateurDeBord_FR.apk
+          cd output
+          zip -qr FR-decompiled-source.zip fr-decompiled
+
+      - name: Build V4 baseline
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Compile APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload FR source
+        uses: actions/upload-artifact@v4
+        with:
+          name: FR-decompiled-source
+          path: output/FR-decompiled-source.zip
+
+      - name: Upload V4 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: V4-baseline-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          
